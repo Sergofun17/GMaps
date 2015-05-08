@@ -30,6 +30,12 @@ import com.lynden.gmapsfx.shapes.RectangleOptions;
 import com.lynden.gmapsfx.zoom.MaxZoomResult;
 import com.lynden.gmapsfx.zoom.MaxZoomService;
 import com.lynden.gmapsfx.zoom.MaxZoomServiceCallback;
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javafx.application.Application;
 import static javafx.application.Application.launch;
 import javafx.beans.value.ObservableValue;
@@ -60,12 +66,13 @@ public class MainApp extends Application implements MapComponentInitializedListe
     private Label lblCenter;
     private Label lblClick;
     private ComboBox<MapTypeIdEnum> mapTypeCombo;
+    public String findStop = "";
 
     @Override
     public void start(final Stage stage) throws Exception {
         mapComponent = new GoogleMapView();
         mapComponent.addMapInializedListener(this);
-        
+
         BorderPane bp = new BorderPane();
         ToolBar tb = new ToolBar();
 
@@ -84,13 +91,13 @@ public class MainApp extends Application implements MapComponentInitializedListe
         lblZoom = new Label();
         lblCenter = new Label();
         lblClick = new Label();
-        
+
         mapTypeCombo = new ComboBox<>();
-        mapTypeCombo.setOnAction( e -> {
-           map.setMapType(mapTypeCombo.getSelectionModel().getSelectedItem() );
+        mapTypeCombo.setOnAction(e -> {
+            map.setMapType(mapTypeCombo.getSelectionModel().getSelectedItem());
         });
         mapTypeCombo.setDisable(true);
-        
+
         Button btnType = new Button("Map type");
         btnType.setOnAction(e -> {
             map.setMapType(MapTypeIdEnum.HYBRID);
@@ -116,7 +123,7 @@ public class MainApp extends Application implements MapComponentInitializedListe
             // This call will fail unless the map is completely ready.
             checkCenter(center);
         });
-        
+
         MapOptions options = new MapOptions();
         options.center(center)
                 .mapMarker(true)
@@ -130,11 +137,11 @@ public class MainApp extends Application implements MapComponentInitializedListe
                 .mapType(MapTypeIdEnum.TERRAIN);
 
         map = mapComponent.createMap(options);
-        
+
         map.setHeading(123.2);
 //        System.out.println("Heading is: " + map.getHeading() );
 
-       MarkerOptions markerOptions = new MarkerOptions();
+        MarkerOptions markerOptions = new MarkerOptions();
         LatLong markerLatLong = new LatLong(47.606189, -122.335842);
         markerOptions.position(markerLatLong)
                 .title("My new Marker")
@@ -142,7 +149,7 @@ public class MainApp extends Application implements MapComponentInitializedListe
                 .visible(true);
 
         final Marker myMarker = new Marker(markerOptions);
-        
+
         MarkerOptions markerOptions2 = new MarkerOptions();
         LatLong markerLatLong2 = new LatLong(47.906189, -122.335842);
         markerOptions2.position(markerLatLong2)
@@ -161,11 +168,10 @@ public class MainApp extends Application implements MapComponentInitializedListe
         InfoWindow window = new InfoWindow(infoOptions);
         //Коммент чтобы не перемещался на поинт
         //window.open(map, myMarker);
-        
+
         //Закоменчен чтобы не создавался и не открывался новый центр
         //map.fitBounds(new LatLongBounds(new LatLong(30, 120), center));
 //        System.out.println("Bounds : " + map.getBounds());
-
         lblCenter.setText(map.getCenter().toString());
         map.centerProperty().addListener((ObservableValue<? extends LatLong> obs, LatLong o, LatLong n) -> {
             lblCenter.setText(n.toString());
@@ -176,111 +182,185 @@ public class MainApp extends Application implements MapComponentInitializedListe
             lblZoom.setText(n.toString());
         });
 
-//      map.addStateEventHandler(MapStateEventType.center_changed, () -> {
+        //      map.addStateEventHandler(MapStateEventType.center_changed, () -> {
 //			System.out.println("center_changed: " + map.getCenter());
 //		});
 //        map.addStateEventHandler(MapStateEventType.tilesloaded, () -> {
 //			System.out.println("We got a tilesloaded event on the map");
 //		});
         map.addUIEventHandler(UIEventType.click, (JSObject obj) -> {
+
+            
+            try {
+                BufferedReader readerStops = new BufferedReader(new FileReader("stops2.txt"));
+                BufferedReader readerCoord = new BufferedReader(new FileReader("cord1.txt"));
+                //readerStops.reset();
+          
+            String stop;
+            String coord;
+            String[] mass;
+            Double min = 9999.0;
+            Double tempmin = 9999.0;
+            Double min1 = 9999.5D;
+            Double min2 = 9999.5D;
             LatLong ll = new LatLong((JSObject) obj.getMember("latLng"));
             //System.out.println("LatLong: lat: " + ll.getLatitude() + " lng: " + ll.getLongitude());
             lblClick.setText(ll.toString());
+
+            while ((stop = readerStops.readLine()) != null) {
+                mass = stop.split(" ");
+                
+                Double d1 = Math.abs(Double.parseDouble(ll.toString().split(" ")[1].replace(",", ".")) - (Double.parseDouble(mass[mass.length - 3].replace(",", "."))));
+                Double d3 = Math.rint(10000 * Math.abs(Double.parseDouble(ll.toString().split(" ")[1].replace(",", ".")) - (Double.parseDouble(mass[mass.length - 3].replace(",", ".")))));
+                Double d2 = Math.rint(10000 * Math.abs(Double.parseDouble(ll.toString().split(" ")[1].replace(",", ".")) - (Double.parseDouble(mass[mass.length - 3].replace(",", "."))))) / 10000;
+                //min1 = Math.min(min1, (Math.rint(10000 * Math.abs(Double.parseDouble(ll.toString().split(" ")[1].replace(",", ".")) - (Double.parseDouble(mass[mass.length - 3].replace(",", ".")))))) / 10000);
+                //min2 = Math.min(min2, (Math.rint(10000 * Math.abs(Double.parseDouble(ll.toString().split(" ")[3].replace(",", ".")) - Double.parseDouble(mass[mass.length - 1].replace(",", "."))))) / 10000);
+                
+                min1 = Math.abs(Double.parseDouble(ll.toString().split(" ")[1].replace(",", ".")) - Double.parseDouble(mass[mass.length - 3].replace(",", ".")));
+                min2 = Math.abs(Double.parseDouble(ll.toString().split(" ")[3].replace(",", ".")) - Double.parseDouble(mass[mass.length - 1].replace(",", ".")));
+                tempmin = Math.sqrt(Math.pow(min1, 2) + Math.pow(min2, 2));
+                if (min != tempmin && tempmin < min) {
+                    min = tempmin;
+                    findStop = "";
+                    for (int i = 0; i < mass.length - 3; i++) {
+                        findStop = findStop + mass[i] + " ";
+                    }
+                }
+            }
+            //readerCoord.reset();
+            while ((coord = readerCoord.readLine()).split(" ")[0].equals(findStop)) {
+                readerCoord.readLine();
+
+            }
+        }
+            
+            catch (FileNotFoundException ex) {
+                Logger.getLogger(MainApp.class.getName()).log(Level.SEVERE, null, ex);
+            }
+             catch (IOException ex) {
+                Logger.getLogger(MainApp.class.getName()).log(Level.SEVERE, null, ex);
+            }
         });
 
-        btnZoomIn.setDisable(false);
-        btnZoomOut.setDisable(false);
-        mapTypeCombo.setDisable(false);
-        
-        mapTypeCombo.getItems().addAll( MapTypeIdEnum.ALL );
+
+    btnZoomIn.setDisable (
+
+    false);
+    btnZoomOut.setDisable (
+
+    false);
+    mapTypeCombo.setDisable (
+
+    false);
+
+    mapTypeCombo.getItems ()
+    .addAll(MapTypeIdEnum.ALL);
 
         LatLong[] ary = new LatLong[]{markerLatLong, markerLatLong2};
-        MVCArray mvc = new MVCArray(ary);
+    MVCArray mvc = new MVCArray(ary);
 
-        PolylineOptions polyOpts = new PolylineOptions()
-                .path(mvc)
-                .strokeColor("red")
-                .strokeWeight(2);
+    PolylineOptions polyOpts = new PolylineOptions()
+            .path(mvc)
+            .strokeColor("red")
+            .strokeWeight(2);
 
-        Polyline poly = new Polyline(polyOpts);
-        map.addMapShape(poly);
-        map.addUIEventHandler(poly, UIEventType.click, (JSObject obj) -> {
+    Polyline poly = new Polyline(polyOpts);
+
+    map.addMapShape (poly);
+
+    map.addUIEventHandler (poly, UIEventType.click,  
+        (JSObject obj) -> {
             LatLong ll = new LatLong((JSObject) obj.getMember("latLng"));
 //            System.out.println("You clicked the line at LatLong: lat: " + ll.getLatitude() + " lng: " + ll.getLongitude());
-        });
+    }
+    );
 
-        LatLong poly1 = new LatLong(54.9941 , 82.9912);
-        LatLong poly2 = new LatLong(54.9953 , 82.9932);
-        LatLong poly3 = new LatLong(54.9957 , 82.9938);
-        LatLong poly4 = new LatLong(54.9958 , 82.9941);
-        LatLong poly5 = new LatLong(54.9960 , 82.9951);
-        LatLong poly6 = new LatLong(54.9963 , 82.9959);
-        LatLong poly7 = new LatLong(54.9963 , 82.9962);
+        LatLong poly1 = new LatLong(54.9941, 82.9912);
+    LatLong poly2 = new LatLong(54.9953, 82.9932);
+    LatLong poly3 = new LatLong(54.9957, 82.9938);
+    LatLong poly4 = new LatLong(54.9958, 82.9941);
+    LatLong poly5 = new LatLong(54.9960, 82.9951);
+    LatLong poly6 = new LatLong(54.9963, 82.9959);
+    LatLong poly7 = new LatLong(54.9963, 82.9962);
 
-        LatLong[] pAry = new LatLong[]{poly1, poly2, poly3, poly4,poly5,poly6,poly7};
-        MVCArray pmvc = new MVCArray(pAry);
+    LatLong[] pAry = new LatLong[]{poly1, poly2, poly3, poly4, poly5, poly6, poly7};
+    MVCArray pmvc = new MVCArray(pAry);
 
-        PolygonOptions polygOpts = new PolygonOptions()
-                .paths(pmvc)
-                .strokeColor("blue")
-                .strokeWeight(2)
-                .editable(false)
-                .fillColor("lightBlue")
-                .fillOpacity(0.5);
+    PolygonOptions polygOpts = new PolygonOptions()
+            .paths(pmvc)
+            .strokeColor("blue")
+            .strokeWeight(2)
+            .editable(false)
+            .fillColor("lightBlue")
+            .fillOpacity(0.5);
 
-        Polygon pg = new Polygon(polygOpts);
-        map.addMapShape(pg);
-        map.addUIEventHandler(pg, UIEventType.click, (JSObject obj) -> {
+    Polygon pg = new Polygon(polygOpts);
+
+    map.addMapShape (pg);
+
+    map.addUIEventHandler (pg, UIEventType.click,  
+        (JSObject obj) -> {
             //polygOpts.editable(true);
             pg.setEditable(!pg.getEditable());
-        });
+    }
+    );
 
         LatLong centreC = new LatLong(47.545481, -121.87384);
-        CircleOptions cOpts = new CircleOptions()
-                .center(centreC)
-                .radius(5000)
-                .strokeColor("green")
-                .strokeWeight(2)
-                .fillColor("orange")
-                .fillOpacity(0.3);
+    CircleOptions cOpts = new CircleOptions()
+            .center(centreC)
+            .radius(5000)
+            .strokeColor("green")
+            .strokeWeight(2)
+            .fillColor("orange")
+            .fillOpacity(0.3);
 
-        Circle c = new Circle(cOpts);
-        map.addMapShape(c);
-        map.addUIEventHandler(c, UIEventType.click, (JSObject obj) -> {
+    Circle c = new Circle(cOpts);
+
+    map.addMapShape (c);
+
+    map.addUIEventHandler (c, UIEventType.click,  
+        (JSObject obj) -> {
             c.setEditable(!c.getEditable());
-        });
+    }
+    );
 
         LatLongBounds llb = new LatLongBounds(new LatLong(47.533893, -122.89856), new LatLong(47.580694, -122.80312));
-        RectangleOptions rOpts = new RectangleOptions()
-                .bounds(llb)
-                .strokeColor("black")
-                .strokeWeight(2)
-                .fillColor("null");
+    RectangleOptions rOpts = new RectangleOptions()
+            .bounds(llb)
+            .strokeColor("black")
+            .strokeWeight(2)
+            .fillColor("null");
 
-        Rectangle rt = new Rectangle(rOpts);
-        map.addMapShape(rt);
+    Rectangle rt = new Rectangle(rOpts);
 
-        LatLong arcC = new LatLong(47.227029, -121.81641);
-        double startBearing = 0;
-        double endBearing = 30;
-        double radius = 30000;
+    map.addMapShape (rt);
 
-        MVCArray path = ArcBuilder.buildArcPoints(arcC, startBearing, endBearing, radius);
-        path.push(arcC);
+    LatLong arcC = new LatLong(47.227029, -121.81641);
+    double startBearing = 0;
+    double endBearing = 30;
+    double radius = 30000;
 
-        Polygon arc = new Polygon(new PolygonOptions()
-                .paths(path)
-                .strokeColor("blue")
-                .fillColor("lightBlue")
-                .fillOpacity(0.3)
-                .strokeWeight(2)
-                .editable(false));
+    MVCArray path = ArcBuilder.buildArcPoints(arcC, startBearing, endBearing, radius);
 
-        map.addMapShape(arc);
-        map.addUIEventHandler(arc, UIEventType.click, (JSObject obj) -> {
+    path.push (arcC);
+
+    Polygon arc = new Polygon(new PolygonOptions()
+            .paths(path)
+            .strokeColor("blue")
+            .fillColor("lightBlue")
+            .fillOpacity(0.3)
+            .strokeWeight(2)
+            .editable(false));
+
+    map.addMapShape (arc);
+
+    map.addUIEventHandler (arc, UIEventType.click,  
+        (JSObject obj) -> {
             arc.setEditable(!arc.getEditable());
-        });
-        
+    }
+
+);
+
 //        LatLong ll = new LatLong(-41.2, 145.9);
 //        LocationElevationRequest ler = new LocationElevationRequest(new LatLong[]{ll});
 //        
@@ -294,7 +374,6 @@ public class MainApp extends Application implements MapComponentInitializedListe
 //                }
 //            }
 //        });
-        
 //        LatLong lle = new LatLong(-42.2, 145.9);
 //        PathElevationRequest per = new PathElevationRequest(new LatLong[]{ll, lle}, 3);
 //        
@@ -308,7 +387,6 @@ public class MainApp extends Application implements MapComponentInitializedListe
 //                }
 //            }
 //        });
-        
 //        MaxZoomService mzs = new MaxZoomService();
 //        mzs.getMaxZoomAtLatLng(lle, new MaxZoomServiceCallback() {
 //            @Override
@@ -317,8 +395,6 @@ public class MainApp extends Application implements MapComponentInitializedListe
 //                System.out.println("Max Zoom: " + result.getMaxZoom());
 //            }
 //        });
-        
-        
     }
 
     private void checkCenter(LatLong center) {
@@ -327,7 +403,7 @@ public class MainApp extends Application implements MapComponentInitializedListe
 //        System.out.println("Testing fromLatLngToPoint result: " + p);
 //        System.out.println("Testing fromLatLngToPoint expected: " + mapComponent.getWidth()/2 + ", " + mapComponent.getHeight()/2);
     }
-    
+
     /**
      * The main() method is ignored in correctly deployed JavaFX application.
      * main() serves only as fallback in case the application can not be
