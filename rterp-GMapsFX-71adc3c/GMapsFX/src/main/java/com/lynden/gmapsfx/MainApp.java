@@ -34,6 +34,7 @@ import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javafx.application.Application;
@@ -67,6 +68,9 @@ public class MainApp extends Application implements MapComponentInitializedListe
     private Label lblClick;
     private ComboBox<MapTypeIdEnum> mapTypeCombo;
     public String findStop = "";
+    public String tmpStop = "";
+    public ArrayList lst = new ArrayList();
+    Polygon pg;
 
     @Override
     public void start(final Stage stage) throws Exception {
@@ -192,12 +196,15 @@ public class MainApp extends Application implements MapComponentInitializedListe
 
             
             try {
-                BufferedReader readerStops = new BufferedReader(new FileReader("stops2.txt"));
-                BufferedReader readerCoord = new BufferedReader(new FileReader("cord1.txt"));
+                BufferedReader readerStops = new BufferedReader(new FileReader("stops.txt"));
+                BufferedReader readerCoord = new BufferedReader(new FileReader("cord3.txt"));
                 //readerStops.reset();
-          
+            lst.removeAll(lst);
+            if(pg != null)
+                map.removeMapShape(pg);
             String stop;
-            String coord;
+            String coord = " ";
+            String coordinates = " ";
             String[] mass;
             Double min = 9999.0;
             Double tempmin = 9999.0;
@@ -227,11 +234,40 @@ public class MainApp extends Application implements MapComponentInitializedListe
                     }
                 }
             }
+            // temp = readerCoord.readLine();
             //readerCoord.reset();
-            while ((coord = readerCoord.readLine()).split(" ")[0].equals(findStop)) {
-                readerCoord.readLine();
-
+            while ((coord = readerCoord.readLine()) != null) {
+                mass = coord.split(" ");
+                
+                String tmpStop = "";
+                for(int i = 3;i < mass.length - 4;i++)
+                    tmpStop = tmpStop + mass[i] + " ";
+                if(tmpStop.equals(findStop)){
+                    String temm = readerCoord.readLine();
+                    while(((coordinates  = readerCoord.readLine()) != null) && !(coordinates.equals(""))){
+                        lst.add(coordinates.split(" ")[0]);
+                        lst.add(coordinates.split(" ")[2]);
+                    }        
+                }
             }
+             LatLong[] pAry = new LatLong[lst.size()/2];
+    for(int i = 0,j = 0; i < lst.size(); i+=2,j++){
+        //LatLong poly2 = new LatLong(Double.parseDouble(lst.get(i).toString()), Double.parseDouble(lst.get(i+1).toString()));
+        pAry[j] = new LatLong(Double.parseDouble(lst.get(i).toString()), Double.parseDouble(lst.get(i+1).toString()));
+    }
+    MVCArray pmvc = new MVCArray(pAry);
+
+    PolygonOptions polygOpts = new PolygonOptions()
+            .paths(pmvc)
+            .strokeColor("blue")
+            .strokeWeight(2)
+            .editable(false)
+            .fillColor("lightBlue")
+            .fillOpacity(0.5);
+
+    pg = new Polygon(polygOpts);
+   
+    map.addMapShape (pg);
         }
             
             catch (FileNotFoundException ex) {
@@ -283,7 +319,11 @@ public class MainApp extends Application implements MapComponentInitializedListe
     LatLong poly6 = new LatLong(54.9963, 82.9959);
     LatLong poly7 = new LatLong(54.9963, 82.9962);
 
-    LatLong[] pAry = new LatLong[]{poly1, poly2, poly3, poly4, poly5, poly6, poly7};
+    //LatLong[] pAry = new LatLong[]{poly1, poly2, poly3, poly4, poly5, poly6, poly7};
+    LatLong[] pAry = new LatLong[lst.size()];
+    for(int i = 0; i < lst.size(); i+=2){
+        pAry[i] = new LatLong((Double)lst.get(i),(Double)lst.get(i+1));
+    }
     MVCArray pmvc = new MVCArray(pAry);
 
     PolygonOptions polygOpts = new PolygonOptions()
