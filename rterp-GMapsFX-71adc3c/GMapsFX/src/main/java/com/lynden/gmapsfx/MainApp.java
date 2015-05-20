@@ -71,17 +71,20 @@ public class MainApp extends Application implements MapComponentInitializedListe
     private Label lblZoom;
     private Label lblCenter;
     private Label lblClick;
-    private ComboBox box ;
+    private ComboBox box;
     private ComboBox<MapTypeIdEnum> mapTypeCombo;
     public String findStop = "";
     public String tmpStop = "";
     public ArrayList lst = new ArrayList();
     public ArrayList stops = new ArrayList();
-    Polygon pg;
+    public ArrayList lstSegment = new ArrayList();
+    Polygon segment = null;
+    Polygon route = null;
 
     @Override
     public void start(final Stage stage) throws Exception {
         mapComponent = new GoogleMapView();
+         mapComponent.setPrefSize(1200,600);
         mapComponent.addMapInializedListener(this);
 
         BorderPane bp = new BorderPane();
@@ -120,8 +123,11 @@ public class MainApp extends Application implements MapComponentInitializedListe
             public void handle(ActionEvent e) {
                 System.out.println(box.getValue());
                 getRoute(box.getValue().toString());
-                drawOnMap(lst);
-                
+                if (route != null) {
+                    map.removeMapShape(route);
+                    drawOnMap(lst, "blue", "route");
+                }
+
             }
         });
         box.getItems().addAll(stops.toArray());
@@ -140,7 +146,6 @@ public class MainApp extends Application implements MapComponentInitializedListe
 
     @Override
     public void mapInitialized() {
-        //Once the map has been loaded by the Webview, initialize the map details.
         LatLong center = new LatLong(55.00723620, 82.93401138);
         mapComponent.addMapReadyListener(() -> {
             // This call will fail unless the map is completely ready.
@@ -196,15 +201,66 @@ public class MainApp extends Application implements MapComponentInitializedListe
         map.zoomProperty().addListener((ObservableValue<? extends Number> obs, Number o, Number n) -> {
             lblZoom.setText(n.toString());
         });
-
         map.addUIEventHandler(UIEventType.click, (JSObject obj) -> {
+
+            try {
+                BufferedReader readerSegment = new BufferedReader(new FileReader("Segments.txt"));
+                //BufferedReader readerCoord = new BufferedReader(new FileReader("cord2.txt"));
+                lst.removeAll(lst);
+                if (segment != null) {
+                    map.removeMapShape(segment);
+                }
+                String stop;
+                String coord = " ";
+                String coordinates = " ";
+                String[] mass;
+                int i = 0;
+                int tmpI = 0;
+                Double min = 9999.0;
+                Double tempmin = 9999.0;
+                Double min1 = 9999.5D;
+                Double min2 = 9999.5D;
+                boolean minimum = false;
+                LatLong ll = new LatLong((JSObject) obj.getMember("latLng"));
+                lblClick.setText(ll.toString());
+                while ((stop = readerSegment.readLine()) != null) {
+                    i++;
+                    mass = stop.split(" ");
+                    if (mass.length >= 2) {
+                        min1 = Math.abs(Double.parseDouble(ll.toString().split(" ")[1].replace(",", ".")) - Double.parseDouble(mass[0].replace(",", ".")));
+                        min2 = Math.abs(Double.parseDouble(ll.toString().split(" ")[3].replace(",", ".")) - Double.parseDouble(mass[2].replace(",", ".")));
+                        tempmin = Math.sqrt(Math.pow(min1, 2) + Math.pow(min2, 2));
+                        if (!Objects.equals(min, tempmin) && tempmin < min) {
+                            min = tempmin;
+                            readerSegment.reset();
+                            lstSegment.removeAll(lstSegment);
+                            while (!(stop = readerSegment.readLine()).equals("")) {
+                                lstSegment.add(stop.split(" ")[0]);
+                                lstSegment.add(stop.split(" ")[2]);
+                            }
+                        }
+                    } else {
+                        readerSegment.mark(99999);
+                    }
+
+                }
+                drawOnMap(lstSegment, "red", "Segment");
+                box.setValue(stop);
+            } catch (FileNotFoundException ex) {
+                Logger.getLogger(MainApp.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (IOException ex) {
+                Logger.getLogger(MainApp.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        });
+
+        map.addUIEventHandler(UIEventType.rightclick, (JSObject obj) -> {
 
             try {
                 BufferedReader readerStops = new BufferedReader(new FileReader("stops.txt"));
                 BufferedReader readerCoord = new BufferedReader(new FileReader("cord2.txt"));
                 lst.removeAll(lst);
-                if (pg != null) {
-                    map.removeMapShape(pg);
+                if (route != null) {
+                    map.removeMapShape(route);
                 }
                 String stop;
                 String coord = " ";
@@ -231,8 +287,9 @@ public class MainApp extends Application implements MapComponentInitializedListe
                     }
                 }
                 getRoute(findStop);
-                drawOnMap(lst);
-                
+                drawOnMap(lst, "blue", "Route");
+                box.setValue(findStop);
+
             } catch (FileNotFoundException ex) {
                 Logger.getLogger(MainApp.class.getName()).log(Level.SEVERE, null, ex);
             } catch (IOException ex) {
@@ -250,13 +307,13 @@ public class MainApp extends Application implements MapComponentInitializedListe
         mapTypeCombo.getItems()
                 .addAll(MapTypeIdEnum.ALL);
 
-        map.addUIEventHandler(pg, UIEventType.click,
-                (JSObject obj) -> {
-                    //polygOpts.editable(true);
-                    pg.setEditable(!pg.getEditable());
-                }
-        );
-
+        //Event для изменения полигонов
+        /*map.addUIEventHandler(pg, UIEventType.click,
+         (JSObject obj) -> {
+         //polygOpts.editable(true);
+         pg.setEditable(!pg.getEditable());
+         }
+         );*/
         LatLong centreC = new LatLong(47.545481, -121.87384);
         CircleOptions cOpts = new CircleOptions()
                 .center(centreC)
@@ -355,9 +412,8 @@ public class MainApp extends Application implements MapComponentInitializedListe
                         lst.add(coordinates.split(" ")[2]);
                     }
                 }
-                
+
             }
-            box.setValue(stop);
 
         } catch (FileNotFoundException ex) {
             Logger.getLogger(MainApp.class.getName()).log(Level.SEVERE, null, ex);
@@ -366,29 +422,37 @@ public class MainApp extends Application implements MapComponentInitializedListe
         }
     }
 
-    public void drawOnMap(ArrayList lst) { 
-        if(lst.size() % 2 != 0)
+    public void drawSegment() {
+
+    }
+
+    public void drawOnMap(ArrayList lst, String color, String segmentOrRoute) {
+        if (lst.size() % 2 != 0) {
             lst.add(lst.get(lst.size()));
+        }
         LatLong[] pAry = new LatLong[lst.size()];
-        
-        for (int i = 0, j = 0; i <lst.size(); i += 2, j++) {
+
+        for (int i = 0, j = 0; i < lst.size(); i += 2, j++) {
             pAry[j] = new LatLong(Double.parseDouble(lst.get(i).toString()), Double.parseDouble(lst.get(i + 1).toString()));
-            pAry[lst.size()-j-1] = new LatLong(Double.parseDouble(lst.get(i).toString()), Double.parseDouble(lst.get(i + 1).toString()));
+            pAry[lst.size() - j - 1] = new LatLong(Double.parseDouble(lst.get(i).toString()), Double.parseDouble(lst.get(i + 1).toString()));
         }
         MVCArray pmvc = new MVCArray(pAry);
 
         PolygonOptions polygOpts = new PolygonOptions()
                 .paths(pmvc)
-                .strokeColor("blue")
+                .strokeColor(color)
                 .strokeWeight(2)
                 .editable(false)
                 .fillColor("lightBlue")
                 .fillOpacity(0.5);
+        if (segmentOrRoute.equals("Segment")) {
+            segment = new Polygon(polygOpts);
+            map.addMapShape(segment);
+        } else {
+            route = new Polygon(polygOpts);
+            map.addMapShape(route);
+        }
 
-        pg = new Polygon(polygOpts);
-        
-        map.addMapShape(pg);
-        
     }
 
     /**
