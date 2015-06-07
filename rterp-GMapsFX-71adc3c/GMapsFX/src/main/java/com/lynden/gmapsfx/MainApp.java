@@ -36,21 +36,27 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javafx.application.Application;
 import static javafx.application.Application.launch;
+import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
+import javafx.event.EventType;
 import javafx.geometry.Point2D;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ToolBar;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 import netscape.javascript.JSObject;
@@ -71,7 +77,8 @@ public class MainApp extends Application implements MapComponentInitializedListe
     private Label lblZoom;
     private Label lblCenter;
     private Label lblClick;
-    private ComboBox box;
+    private ComboBox boxRoute;
+    private ComboBox routeSection;
     private ComboBox<MapTypeIdEnum> mapTypeCombo;
     public String findStop = "";
     public String tmpStop = "";
@@ -80,17 +87,20 @@ public class MainApp extends Application implements MapComponentInitializedListe
     public ArrayList lstSegment = new ArrayList();
     Polygon segment = null;
     Polygon route = null;
+    Circle circle = null;
+    public ArrayList< Map<String, List<Double>>> maps;
+    public Map<String, ArrayList<Double>> map1;
 
     @Override
     public void start(final Stage stage) throws Exception {
         mapComponent = new GoogleMapView();
-         mapComponent.setPrefSize(1200,600);
+        mapComponent.setPrefSize(1200, 600);
         mapComponent.addMapInializedListener(this);
 
         BorderPane bp = new BorderPane();
         ToolBar tb = new ToolBar();
 
-        btnZoomIn = new Button("Zoom In");
+        /*btnZoomIn = new Button("Zoom In");
         btnZoomIn.setOnAction(e -> {
             map.zoomProperty().set(map.getZoom() + 1);
         });
@@ -100,41 +110,52 @@ public class MainApp extends Application implements MapComponentInitializedListe
         btnZoomOut.setOnAction(e -> {
             map.zoomProperty().set(map.getZoom() - 1);
         });
-        btnZoomOut.setDisable(true);
+        btnZoomOut.setDisable(true);*/
 
         lblZoom = new Label();
         lblCenter = new Label();
         lblClick = new Label();
 
-        mapTypeCombo = new ComboBox<>();
+        /*mapTypeCombo = new ComboBox<>();
         mapTypeCombo.setOnAction(e -> {
             map.setMapType(mapTypeCombo.getSelectionModel().getSelectedItem());
         });
-        mapTypeCombo.setDisable(true);
+        mapTypeCombo.setDisable(true);*/
 
         Button btnType = new Button("Map type");
         btnType.setOnAction(e -> {
             map.setMapType(MapTypeIdEnum.HYBRID);
         });
-        this.getStops();
-        box = new ComboBox();
-        box.setOnAction(new EventHandler<ActionEvent>() {
+        getStops();
+        boxRoute = new ComboBox();
+        boxRoute.setMinWidth(200);
+        boxRoute.setOnAction(new EventHandler<ActionEvent>() {
             @Override
             public void handle(ActionEvent e) {
-                System.out.println(box.getValue());
-                getRoute(box.getValue().toString());
+                getRoutes(getStopNameFromString(boxRoute.getValue().toString()));
+                addCircleStop(boxRoute.getValue().toString());
+                fillRouteSection();
+            }
+        });
+        routeSection = new ComboBox();
+        routeSection.setOnAction(new EventHandler<ActionEvent>() {
+            @Override
+            public void handle(ActionEvent e) {
                 if (route != null) {
                     map.removeMapShape(route);
-                    drawOnMap(lst, "blue", "route");
+                }
+                ArrayList lss = map1.get(routeSection.getValue());
+                if (lss != null) {
+                    drawOnMap(lss, "blue", "route");
                 }
 
             }
         });
-        box.getItems().addAll(stops.toArray());
-        tb.getItems().addAll(btnZoomIn, btnZoomOut, mapTypeCombo,
+        boxRoute.getItems().addAll(stops.toArray());
+        tb.getItems().addAll(//btnZoomIn, btnZoomOut, mapTypeCombo,
                 new Label("Zoom: "), lblZoom,
                 new Label("Center: "), lblCenter,
-                new Label("Click: "), lblClick, box);
+                new Label("Click: "), lblClick, boxRoute, routeSection);
 
         bp.setTop(tb);
         bp.setCenter(mapComponent);
@@ -145,6 +166,7 @@ public class MainApp extends Application implements MapComponentInitializedListe
     }
 
     @Override
+
     public void mapInitialized() {
         LatLong center = new LatLong(55.00723620, 82.93401138);
         mapComponent.addMapReadyListener(() -> {
@@ -162,7 +184,7 @@ public class MainApp extends Application implements MapComponentInitializedListe
                 .streetViewControl(false)
                 .zoomControl(false)
                 .mapType(MapTypeIdEnum.TERRAIN);
-
+        
         map = mapComponent.createMap(options);
 
         map.setHeading(123.2);
@@ -205,22 +227,18 @@ public class MainApp extends Application implements MapComponentInitializedListe
 
             try {
                 BufferedReader readerSegment = new BufferedReader(new FileReader("Segments.txt"));
-                //BufferedReader readerCoord = new BufferedReader(new FileReader("cord2.txt"));
-                lst.removeAll(lst);
+
+                lst.clear();
                 if (segment != null) {
                     map.removeMapShape(segment);
                 }
                 String stop;
-                String coord = " ";
-                String coordinates = " ";
                 String[] mass;
                 int i = 0;
-                int tmpI = 0;
                 Double min = 9999.0;
                 Double tempmin = 9999.0;
                 Double min1 = 9999.5D;
                 Double min2 = 9999.5D;
-                boolean minimum = false;
                 LatLong ll = new LatLong((JSObject) obj.getMember("latLng"));
                 lblClick.setText(ll.toString());
                 while ((stop = readerSegment.readLine()) != null) {
@@ -233,7 +251,7 @@ public class MainApp extends Application implements MapComponentInitializedListe
                         if (!Objects.equals(min, tempmin) && tempmin < min) {
                             min = tempmin;
                             readerSegment.reset();
-                            lstSegment.removeAll(lstSegment);
+                            lstSegment.clear();
                             while (!(stop = readerSegment.readLine()).equals("")) {
                                 lstSegment.add(stop.split(" ")[0]);
                                 lstSegment.add(stop.split(" ")[2]);
@@ -242,10 +260,9 @@ public class MainApp extends Application implements MapComponentInitializedListe
                     } else {
                         readerSegment.mark(99999);
                     }
-
                 }
                 drawOnMap(lstSegment, "red", "Segment");
-                box.setValue(stop);
+                boxRoute.setValue(stop);
             } catch (FileNotFoundException ex) {
                 Logger.getLogger(MainApp.class.getName()).log(Level.SEVERE, null, ex);
             } catch (IOException ex) {
@@ -255,46 +272,12 @@ public class MainApp extends Application implements MapComponentInitializedListe
 
         map.addUIEventHandler(UIEventType.rightclick, (JSObject obj) -> {
 
-            try {
-                BufferedReader readerStops = new BufferedReader(new FileReader("stops.txt"));
-                BufferedReader readerCoord = new BufferedReader(new FileReader("cord2.txt"));
-                lst.removeAll(lst);
-                if (route != null) {
-                    map.removeMapShape(route);
-                }
-                String stop;
-                String coord = " ";
-                String coordinates = " ";
-                String[] mass;
-                Double min = 9999.0;
-                Double tempmin = 9999.0;
-                Double min1 = 9999.5D;
-                Double min2 = 9999.5D;
-                LatLong ll = new LatLong((JSObject) obj.getMember("latLng"));
-                lblClick.setText(ll.toString());
+            findStop = findStop(obj);
+            //getRoutess(findStop);
+            //fillRouteSection();
+            //drawOnMap(lst, "blue", "Route");
+            boxRoute.setValue(findStop);
 
-                while ((stop = readerStops.readLine()) != null) {
-                    mass = stop.split(" ");
-                    min1 = Math.abs(Double.parseDouble(ll.toString().split(" ")[1].replace(",", ".")) - Double.parseDouble(mass[mass.length - 3].replace(",", ".")));
-                    min2 = Math.abs(Double.parseDouble(ll.toString().split(" ")[3].replace(",", ".")) - Double.parseDouble(mass[mass.length - 1].replace(",", ".")));
-                    tempmin = Math.sqrt(Math.pow(min1, 2) + Math.pow(min2, 2));
-                    if (!Objects.equals(min, tempmin) && tempmin < min) {
-                        min = tempmin;
-                        findStop = "";
-                        for (int i = 0; i < mass.length - 3; i++) {
-                            findStop = findStop + mass[i] + " ";
-                        }
-                    }
-                }
-                getRoute(findStop);
-                drawOnMap(lst, "blue", "Route");
-                box.setValue(findStop);
-
-            } catch (FileNotFoundException ex) {
-                Logger.getLogger(MainApp.class.getName()).log(Level.SEVERE, null, ex);
-            } catch (IOException ex) {
-                Logger.getLogger(MainApp.class.getName()).log(Level.SEVERE, null, ex);
-            }
         });
 
         btnZoomIn.setDisable(
@@ -314,25 +297,12 @@ public class MainApp extends Application implements MapComponentInitializedListe
          pg.setEditable(!pg.getEditable());
          }
          );*/
-        LatLong centreC = new LatLong(47.545481, -121.87384);
-        CircleOptions cOpts = new CircleOptions()
-                .center(centreC)
-                .radius(5000)
-                .strokeColor("green")
-                .strokeWeight(2)
-                .fillColor("orange")
-                .fillOpacity(0.3);
-
-        Circle c = new Circle(cOpts);
-
-        map.addMapShape(c);
-
-        map.addUIEventHandler(c, UIEventType.click,
-                (JSObject obj) -> {
-                    c.setEditable(!c.getEditable());
-                }
-        );
-
+        //Event для изменения Кругов
+       /* map.addUIEventHandler(c, UIEventType.click,
+         (JSObject obj) -> {
+         c.setEditable(!c.getEditable());
+         }
+         );*/
         LatLongBounds llb = new LatLongBounds(new LatLong(47.533893, -122.89856), new LatLong(47.580694, -122.80312));
         RectangleOptions rOpts = new RectangleOptions()
                 .bounds(llb)
@@ -370,19 +340,46 @@ public class MainApp extends Application implements MapComponentInitializedListe
 
     }
 
+    public String findStop(JSObject obj) {
+        try {
+            BufferedReader readerStops = new BufferedReader(new FileReader("stops.txt"));
+            lst.clear();
+            if (route != null) {
+                map.removeMapShape(route);
+            }
+            String stop;
+            String[] mass;
+            Double min = 9999.0;
+            Double tempmin = 9999.0;
+            Double min1 = 9999.5D;
+            Double min2 = 9999.5D;
+            LatLong ll = new LatLong((JSObject) obj.getMember("latLng"));
+            lblClick.setText(ll.toString());
+
+            while ((stop = readerStops.readLine()) != null) {
+                mass = stop.split(" ");
+                min1 = Math.abs(Double.parseDouble(ll.toString().split(" ")[1].replace(",", ".")) - Double.parseDouble(mass[mass.length - 3].replace(",", ".")));
+                min2 = Math.abs(Double.parseDouble(ll.toString().split(" ")[3].replace(",", ".")) - Double.parseDouble(mass[mass.length - 1].replace(",", ".")));
+                tempmin = Math.sqrt(Math.pow(min1, 2) + Math.pow(min2, 2));
+                if (!Objects.equals(min, tempmin) && tempmin < min) {
+                    min = tempmin;
+                    findStop = stop;
+                }
+            }
+        } catch (FileNotFoundException ex) {
+            Logger.getLogger(MainApp.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException ex) {
+            Logger.getLogger(MainApp.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return findStop;
+    }
+
     public void getStops() {
         try {
             BufferedReader readerStops = new BufferedReader(new FileReader("stops.txt"));
             String stop = "";
-            String tmpStop = "";
-            String[] mass;
             while ((stop = readerStops.readLine()) != null) {
-                mass = stop.split(" ");
-                tmpStop = "";
-                for (int i = 0; i < mass.length - 3; i++) {
-                    tmpStop = tmpStop + mass[i] + " ";
-                }
-                stops.add(tmpStop);
+                stops.add(stop);
             }
             Collections.sort(stops);
         } catch (FileNotFoundException ex) {
@@ -392,12 +389,32 @@ public class MainApp extends Application implements MapComponentInitializedListe
         }
     }
 
-    public void getRoute(String stop) {
+    public String getStopNameFromString(String stop) {
+        String stopName = "";
+        String[] mass = stop.split(" ");;
+        for (int i = 0; i < mass.length - 3; i++) 
+            stopName = stopName + mass[i] + " ";
+        return stopName;
+        }
+    
+    public String getStopCoordinateFromString(String stop){
+        String stopCoordinate = "";
+        String[] mass = stop.split(" ");
+        for (int i = mass.length-3; i < mass.length; i++) 
+            stopCoordinate = stopCoordinate + mass[i] + " ";
+        return stopCoordinate;
+    }
+ 
+    public void getRoutes(String stop) {
         try {
-            lst.removeAll(lst);
+            maps = new ArrayList<Map<String, List<Double>>>();
+            map1 = new HashMap<String, ArrayList<Double>>();
+            ArrayList<Double> lsst;
             BufferedReader readerRoute = new BufferedReader(new FileReader("route.txt"));
             String route = "";
             String[] mass;
+            int count = 0;
+            boolean noData = false;
             String coordinates = " ";
             while ((route = readerRoute.readLine()) != null) {
                 mass = route.split(" ");
@@ -406,15 +423,34 @@ public class MainApp extends Application implements MapComponentInitializedListe
                     tmpStop = tmpStop + mass[i] + " ";
                 }
                 if (tmpStop.equals(stop)) {
-                    readerRoute.readLine();
-                    while (((coordinates = readerRoute.readLine()) != null) && !(coordinates.equals(""))) {
-                        lst.add(coordinates.split(" ")[0]);
-                        lst.add(coordinates.split(" ")[2]);
+                    noData = false;
+                    lsst = new ArrayList<Double>();
+                    String temp = readerRoute.readLine();
+                    if (temp.equals("")) {
+                        break;
                     }
+                    while (((coordinates = readerRoute.readLine()) != null) && !(coordinates.equals(""))) {//
+                        if (coordinates.split(" ").length > 3 && !coordinates.split(" ")[6].equals("нет")) {
+                            noData = true;
+                        } else {
+                            lsst.add(Double.parseDouble(coordinates.split(" ")[0]));
+                            lsst.add(Double.parseDouble(coordinates.split(" ")[2]));
+                        }
+                    }
+                    if (noData == true) {
+                        break;
+                    }
+                    readerRoute.mark(999);
+                    mass = readerRoute.readLine().split(" ");
+                    String nextStop = "";
+                    for (int i = 3; i < mass.length - 4; i++) {
+                        nextStop = nextStop + mass[i] + " ";
+                    }
+                    map1.put(stop.concat(" -> ").concat(nextStop).concat("" + count), lsst);
+                    readerRoute.reset();
+                    count++;
                 }
-
             }
-
         } catch (FileNotFoundException ex) {
             Logger.getLogger(MainApp.class.getName()).log(Level.SEVERE, null, ex);
         } catch (IOException ex) {
@@ -427,42 +463,64 @@ public class MainApp extends Application implements MapComponentInitializedListe
     }
 
     public void drawOnMap(ArrayList lst, String color, String segmentOrRoute) {
-        if (lst.size() % 2 != 0) {
-            lst.add(lst.get(lst.size()));
-        }
-        LatLong[] pAry = new LatLong[lst.size()];
+        if (lst != null) {
+            if (lst.size() % 2 != 0) {
+                lst.add(lst.get(lst.size()));
+            }
+            LatLong[] pAry = new LatLong[lst.size()];
 
-        for (int i = 0, j = 0; i < lst.size(); i += 2, j++) {
-            pAry[j] = new LatLong(Double.parseDouble(lst.get(i).toString()), Double.parseDouble(lst.get(i + 1).toString()));
-            pAry[lst.size() - j - 1] = new LatLong(Double.parseDouble(lst.get(i).toString()), Double.parseDouble(lst.get(i + 1).toString()));
-        }
-        MVCArray pmvc = new MVCArray(pAry);
+            for (int i = 0, j = 0; i < lst.size(); i += 2, j++) {
+                pAry[j] = new LatLong(Double.parseDouble(lst.get(i).toString()), Double.parseDouble(lst.get(i + 1).toString()));
+                pAry[lst.size() - j - 1] = new LatLong(Double.parseDouble(lst.get(i).toString()), Double.parseDouble(lst.get(i + 1).toString()));
+            }
+            MVCArray pmvc = new MVCArray(pAry);
 
-        PolygonOptions polygOpts = new PolygonOptions()
-                .paths(pmvc)
-                .strokeColor(color)
+            PolygonOptions polygOpts = new PolygonOptions()
+                    .paths(pmvc)
+                    .strokeColor(color)
+                    .strokeWeight(2)
+                    .editable(false)
+                    .fillColor("lightBlue")
+                    .fillOpacity(0.5);
+            if (segmentOrRoute.equals("Segment")) {
+                segment = new Polygon(polygOpts);
+                map.addMapShape(segment);
+            } else {
+                route = new Polygon(polygOpts);
+                map.addMapShape(route);
+            }
+        }
+    }
+
+    public void addCircleStop(String stop) {
+        if(circle != null)
+            map.removeMapShape(circle);
+        String coordinates = getStopCoordinateFromString(stop);
+        LatLong centreC = new LatLong(Double.parseDouble(coordinates.split(" ")[0]), Double.parseDouble(coordinates.split(" ")[2]));
+        CircleOptions cOpts = new CircleOptions()
+                .center(centreC)
+                .radius(30)
+                .strokeColor("orange")
                 .strokeWeight(2)
-                .editable(false)
-                .fillColor("lightBlue")
-                .fillOpacity(0.5);
-        if (segmentOrRoute.equals("Segment")) {
-            segment = new Polygon(polygOpts);
-            map.addMapShape(segment);
-        } else {
-            route = new Polygon(polygOpts);
-            map.addMapShape(route);
-        }
+                .fillColor("red")
+                .fillOpacity(0.3);
+
+        circle = new Circle(cOpts);
+        map.addMapShape(circle);
+        map.setCenter(centreC);
+        map.setZoom(17);
+        
 
     }
 
-    /**
-     * The main() method is ignored in correctly deployed JavaFX application.
-     * main() serves only as fallback in case the application can not be
-     * launched through deployment artifacts, e.g., in IDEs with limited FX
-     * support. NetBeans ignores main().
-     *
-     * @param args the command line arguments
-     */
+    public void fillRouteSection() {
+        routeSection.getItems().clear();
+        routeSection.getItems().addAll(map1.keySet());
+        routeSection.setValue("Выберете интересующий вас маршрут");
+    }
+
+ 
+
     public static void main(String[] args) {
         System.setProperty("java.net.useSystemProxies", "true");
         launch(args);
